@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 
-	corev1 "k8s.io/api/core/v1"
 	capiv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/controllers/remote"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,16 +20,22 @@ type ClusterObject interface {
 	GetCluster() client.ObjectKey
 }
 
-type clusterObject struct {
+type ClusterObjectList struct {
+	client.ObjectList
+	AddItems func(client.ObjectList, client.ObjectKey) []ClusterObject
+}
+
+// Implements ClusterObject
+type Object struct {
 	client.Object
-	cluster client.ObjectKey
+	Cluster client.ObjectKey
 }
 
-func (co clusterObject) GetCluster() client.ObjectKey {
-	return co.cluster
+func (o Object) GetCluster() client.ObjectKey {
+	return o.Cluster
 }
 
-func (gcl *GlobalClient) List(ctx context.Context, obj client.ObjectList, opts ...client.ListOption) ([]ClusterObject, error) {
+func (gcl *GlobalClient) List(ctx context.Context, obj ClusterObjectList, opts ...client.ListOption) ([]ClusterObject, error) {
 	clusters := &capiv1.ClusterList{}
 	if err := gcl.GetClient().List(ctx, clusters); err != nil {
 		return nil, err
@@ -53,25 +58,12 @@ func (gcl *GlobalClient) List(ctx context.Context, obj client.ObjectList, opts .
 			errors = append(errors, err)
 			continue
 		}
-		if err := cl.List(ctx, obj, opts...); err != nil {
+		if err := cl.List(ctx, obj.ObjectList, opts...); err != nil {
 			errors = append(errors, err)
 			continue
 		}
-		// we really need to get concrete type here
-		switch object := obj.(type) {
-		case *corev1.PodList:
-			for _, o := range object.Items {
-				objects = append(objects, clusterObject{Object: o.DeepCopy(), cluster: nsn})
-			}
-		case *corev1.ServiceList:
-			for _, o := range object.Items {
-				objects = append(objects, clusterObject{Object: o.DeepCopy(), cluster: nsn})
-			}
-		}
+		objects = append(objects, obj.AddItems(obj.ObjectList, nsn)...)
 	}
-
-	// caller shouldn't use this, use returned value instead
-	obj = nil
 
 	if len(errors) > 0 {
 		log.Printf("ignoring %d found errors", len(errors))

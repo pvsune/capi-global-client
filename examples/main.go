@@ -28,13 +28,14 @@ func main() {
 		log.Fatalf("unable to create manager: %s", err)
 	}
 
-	var ctx = context.TODO()
+	ctx := context.TODO()
 	go mgr.Start(ctx)
 	if !mgr.GetCache().WaitForCacheSync(ctx) {
 		log.Fatalf("cannot sync cache")
 	}
 
-	var gcl = capigcl.GlobalClient{
+	// global client supports indexes for use with client.Options
+	gcl := capigcl.GlobalClient{
 		Manager: mgr,
 		Indexes: []remote.Index{{
 			Object: &corev1.Pod{},
@@ -44,7 +45,20 @@ func main() {
 			},
 		}},
 	}
-	objects, err := gcl.List(ctx, &corev1.PodList{}, client.MatchingFields{"metadata.name": "foo"})
+
+	// it's impossible to get concrete type from client.ObjectList
+	// global client will call AddItems() to add in response
+	obj := capigcl.ClusterObjectList{
+		ObjectList: &corev1.PodList{},
+		AddItems: func(pods client.ObjectList, nsn client.ObjectKey) (items []capigcl.ClusterObject) {
+			for _, o := range pods.(*corev1.PodList).Items {
+				items = append(items, capigcl.Object{Object: o.DeepCopy(), Cluster: nsn})
+			}
+			return
+		},
+	}
+
+	objects, err := gcl.List(ctx, obj, client.MatchingFields{"metadata.name": "nginx"})
 	if err != nil {
 		log.Fatalf("cannot list objects: %s", err)
 	}
