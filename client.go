@@ -22,7 +22,7 @@ type ClusterObject interface {
 
 type ClusterObjectList struct {
 	client.ObjectList
-	AddItems func(client.ObjectList, client.ObjectKey) []ClusterObject
+	AddItems func(client.ObjectList) []client.Object
 }
 
 // Implements ClusterObject
@@ -58,11 +58,14 @@ func (gcl *GlobalClient) List(ctx context.Context, obj ClusterObjectList, opts .
 			errors = append(errors, err)
 			continue
 		}
-		if err := cl.List(ctx, obj.ObjectList, opts...); err != nil {
+		oo := obj.ObjectList
+		if err := cl.List(ctx, oo, opts...); err != nil {
 			errors = append(errors, err)
 			continue
 		}
-		objects = append(objects, obj.AddItems(obj.ObjectList, nsn)...)
+		for _, o := range obj.AddItems(oo) {
+			objects = append(objects, Object{Object: o, Cluster: nsn})
+		}
 	}
 
 	if len(errors) > 0 {

@@ -50,9 +50,9 @@ func main() {
 	// global client will call AddItems() to add in response
 	obj := capigcl.ClusterObjectList{
 		ObjectList: &corev1.PodList{},
-		AddItems: func(pods client.ObjectList, nsn client.ObjectKey) (items []capigcl.ClusterObject) {
+		AddItems: func(pods client.ObjectList) (items []client.Object) {
 			for _, o := range pods.(*corev1.PodList).Items {
-				items = append(items, capigcl.Object{Object: o.DeepCopy(), Cluster: nsn})
+				items = append(items, o.DeepCopy())
 			}
 			return
 		},
