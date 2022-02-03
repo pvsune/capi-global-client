@@ -4,11 +4,11 @@ import (
 	"context"
 	"log"
 
+	corev1 "k8s.io/api/core/v1"
 	capiv1 "sigs.k8s.io/cluster-api/api/v1alpha3"
 	"sigs.k8s.io/cluster-api/controllers/remote"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	corev1 "k8s.io/api/core/v1"
 )
 
 type GlobalClient struct {
@@ -57,12 +57,21 @@ func (gcl *GlobalClient) List(ctx context.Context, obj client.ObjectList, opts .
 			errors = append(errors, err)
 			continue
 		}
-		for _, oo := range obj.(*corev1.PodList).Items {
-			install := &corev1.Pod{}
-			oo.DeepCopyInto(install)
-			objects = append(objects, clusterObject{Object: install, cluster: nsn})
+		// we really need to get concrete type here
+		switch object := obj.(type) {
+		case *corev1.PodList:
+			for _, o := range object.Items {
+				objects = append(objects, clusterObject{Object: o.DeepCopy(), cluster: nsn})
+			}
+		case *corev1.ServiceList:
+			for _, o := range object.Items {
+				objects = append(objects, clusterObject{Object: o.DeepCopy(), cluster: nsn})
+			}
 		}
 	}
+
+	// caller shouldn't use this, use returned value instead
+	obj = nil
 
 	if len(errors) > 0 {
 		log.Printf("ignoring %d found errors", len(errors))
